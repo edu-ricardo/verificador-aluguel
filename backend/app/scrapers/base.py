@@ -1,9 +1,11 @@
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date
 from typing import List, Optional
-import logging
+
 import httpx
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -17,7 +19,7 @@ class ScrapedProperty:
     url: str
     city: str
     state: str
-    property_type: str = "chacara" # chacara, sitio, casa
+    property_type: str = "chacara"  # chacara, sitio, casa
     neighborhood: Optional[str] = None
     daily_rate: float = 0.0
     cleaning_fee: float = 0.0
@@ -48,7 +50,9 @@ class BaseScraper(ABC):
 
     async def fetch_html(self, url: str, params: Optional[dict] = None) -> Optional[str]:
         try:
-            async with httpx.AsyncClient(headers=self.headers, timeout=settings.SCRAPER_TIMEOUT_SECONDS, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                headers=self.headers, timeout=settings.SCRAPER_TIMEOUT_SECONDS, follow_redirects=True
+            ) as client:
                 response = await client.get(url, params=params)
                 if response.status_code == 200:
                     return response.text

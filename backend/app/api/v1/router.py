@@ -1,5 +1,6 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import search, properties
+
+from app.api.v1.endpoints import properties, search
 
 api_router = APIRouter()
 

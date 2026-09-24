@@ -1,7 +1,8 @@
-from typing import List, Union
-from pydantic import AnyHttpUrl, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
 import json
+from typing import List, Union
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):

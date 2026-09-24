@@ -1,5 +1,6 @@
 from datetime import date
 from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -53,7 +54,7 @@ class SearchPropertyItem(BaseModel):
     allows_pets: bool
     images: List[str] = []
     amenities: List[str] = []
-    
+
     # Comparações de preço
     platforms: List[PlatformComparisonItem]
     lowest_daily_rate: float

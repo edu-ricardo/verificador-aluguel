@@ -1,8 +1,10 @@
 import re
+import unicodedata
 from datetime import date
 from typing import List, Optional
-import unicodedata
+
 from bs4 import BeautifulSoup
+
 from app.scrapers.base import BaseScraper, ScrapedProperty, logger
 
 
@@ -92,7 +94,9 @@ class OLXScraper(BaseScraper):
                             has_pool=has_pool or True,
                             has_bbq=has_bbq or True,
                             allows_pets=allows_pets,
-                            images=[img_url] if img_url else [
+                            images=[img_url]
+                            if img_url
+                            else [
                                 "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80"
                             ],
                             rating=4.7,
@@ -113,7 +117,7 @@ class OLXScraper(BaseScraper):
     ) -> List[ScrapedProperty]:
         base_city = city.title()
         base_state = (state or "SP").upper()
-        
+
         props = [
             # Note que este primeiro imóvel é idêntico em características ao "Recanto Verde" do TemporadaLivre, para ilustrar a comparação de preços!
             ScrapedProperty(
@@ -125,7 +129,7 @@ class OLXScraper(BaseScraper):
                 state=base_state,
                 property_type="chacara",
                 neighborhood="Zona Rural / Represa",
-                daily_rate=520.0, # Preço mais barato na OLX sem taxa intermediária!
+                daily_rate=520.0,  # Preço mais barato na OLX sem taxa intermediária!
                 cleaning_fee=120.0,
                 service_fee=0.0,
                 max_guests=max(guests, 15),

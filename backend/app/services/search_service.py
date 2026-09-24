@@ -2,16 +2,13 @@ import asyncio
 import hashlib
 import json
 import logging
-from datetime import date
 from difflib import SequenceMatcher
 from typing import Dict, List, Optional
+
 import redis.asyncio as redis
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.listing import PlatformListing
-from app.models.property import Property
 from app.schemas.search import (
     PlatformComparisonItem,
     SearchPropertyItem,

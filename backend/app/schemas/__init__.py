@@ -1,10 +1,10 @@
+from app.schemas.property import ListingBase, PropertyCreate, PropertyDetail
 from app.schemas.search import (
+    PlatformComparisonItem,
+    SearchPropertyItem,
     SearchQuery,
     SearchResponse,
-    SearchPropertyItem,
-    PlatformComparisonItem,
 )
-from app.schemas.property import PropertyCreate, PropertyDetail, ListingBase
 
 __all__ = [
     "SearchQuery",

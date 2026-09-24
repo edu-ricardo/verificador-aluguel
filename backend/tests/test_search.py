@@ -1,4 +1,5 @@
 import pytest
+
 from app.schemas.search import SearchQuery
 from app.services.search_service import search_service
 
@@ -12,11 +13,11 @@ async def test_search_service_aggregation():
         property_type="chacara",
     )
     response = await search_service.search(query)
-    
+
     assert response.city == "Atibaia"
     assert response.total_results >= 1
     assert len(response.results) >= 1
-    
+
     first = response.results[0]
     assert first.max_guests >= 10
     assert first.lowest_daily_rate > 0

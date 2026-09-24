@@ -1,8 +1,10 @@
 import re
+import unicodedata
 from datetime import date
 from typing import List, Optional
-import unicodedata
+
 from bs4 import BeautifulSoup
+
 from app.scrapers.base import BaseScraper, ScrapedProperty, logger
 
 
@@ -101,7 +103,9 @@ class TemporadaLivreScraper(BaseScraper):
                             has_pool=has_pool or True,
                             has_bbq=has_bbq or True,
                             allows_pets=allows_pets,
-                            images=[img_url] if img_url else [
+                            images=[img_url]
+                            if img_url
+                            else [
                                 "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80"
                             ],
                             rating=4.8,
@@ -123,7 +127,7 @@ class TemporadaLivreScraper(BaseScraper):
         """Garante disponibilidade de dados consistentes para a cidade pesquisada."""
         base_city = city.title()
         base_state = (state or "SP").upper()
-        
+
         props = [
             ScrapedProperty(
                 platform=self.platform_code,

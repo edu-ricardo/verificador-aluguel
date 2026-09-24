@@ -1,0 +1,18 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Seleciona regras padrão essenciais: Pyflakes, pycodestyle e ordenação isort
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501", # Limite de tamanho de linha tratado pelo formatador
+    "BLE001", # Permite captura de Exception genérica com log defensivo
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
