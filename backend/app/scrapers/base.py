@@ -51,7 +51,9 @@ class BaseScraper(ABC):
     async def fetch_html(self, url: str, params: Optional[dict] = None) -> Optional[str]:
         try:
             async with httpx.AsyncClient(
-                headers=self.headers, timeout=settings.SCRAPER_TIMEOUT_SECONDS, follow_redirects=True
+                headers=self.headers,
+                timeout=httpx.Timeout(5.0, connect=3.0),
+                follow_redirects=True,
             ) as client:
                 response = await client.get(url, params=params)
                 if response.status_code == 200:

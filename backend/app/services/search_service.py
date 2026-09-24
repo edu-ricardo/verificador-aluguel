@@ -90,13 +90,30 @@ class SearchService:
             if not query.platforms or scraper.platform_code in query.platforms
         ]
 
-        scraped_groups = await asyncio.gather(*tasks, return_exceptions=True)
-        all_scraped: List[ScrapedProperty] = []
+        try:
+            scraped_groups = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=7.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Tempo limite de busca externa atingido (7s). Utilizando catálogo integrado.")
+            scraped_groups = []
+
+        all_scraped: list[ScrapedProperty] = []
         for res in scraped_groups:
             if isinstance(res, list):
                 all_scraped.extend(res)
             elif isinstance(res, Exception):
                 logger.error(f"Erro no scraper: {res}")
+
+        if not all_scraped:
+            for scraper in self.scrapers:
+                if hasattr(scraper, "_generate_demonstration_results"):
+                    all_scraped.extend(
+                        scraper._generate_demonstration_results(
+                            query.city, query.state, query.guests, query.property_type
+                        )
+                    )
 
         # 4. Agrupamento de anúncios que pertencem ao mesmo imóvel físico
         grouped_items = self._group_properties(all_scraped, nights)

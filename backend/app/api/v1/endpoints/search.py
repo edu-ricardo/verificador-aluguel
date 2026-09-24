@@ -1,10 +1,8 @@
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query
 
-from app.core.database import get_db
 from app.schemas.search import SearchQuery, SearchResponse
 from app.services.search_service import search_service
 
@@ -27,7 +25,6 @@ async def search_rentals(
     sort_by: Optional[str] = Query("price_asc", description="price_asc, price_desc, savings_desc, guests_desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
 ):
     query = SearchQuery(
         city=city,
@@ -45,4 +42,4 @@ async def search_rentals(
         page=page,
         page_size=page_size,
     )
-    return await search_service.search(query, db=db)
+    return await search_service.search(query)
