@@ -39,7 +39,7 @@ Projetada seguindo as melhores práticas de desenvolvimento, com consumo otimiza
 2. Vá no menu lateral em **Stacks** e clique em **+ Add stack**.
 3. Defina o nome da Stack (ex: `aluguel-temporada`).
 4. Escolha o método de build **Repository**:
-   - **Repository URL**: `https://github.com/SEU_USUARIO/verificador-aluguel-casas`
+   - **Repository URL**: `https://github.com/edu-ricardo/verificador-aluguel.git`
    - **Repository reference**: `refs/heads/main`
    - **Compose path**: `docker-compose.yml`
    - Ative a opção **Automatic updates** (Webhook ou Polling) se desejar que o Portainer atualize os containers automaticamente a cada `git push`.
@@ -69,8 +69,8 @@ Caso queira rodar diretamente na sua máquina de desenvolvimento com Docker:
 
 ```bash
 # 1. Clone o repositório
-git clone https://github.com/SEU_USUARIO/verificador-aluguel-casas.git
-cd verificador-aluguel-casas
+git clone https://github.com/edu-ricardo/verificador-aluguel.git
+cd verificador-aluguel
 
 # 2. Copie o arquivo de variáveis de ambiente
 cp .env.example .env

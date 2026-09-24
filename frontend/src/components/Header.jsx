@@ -30,7 +30,7 @@ export default function Header() {
           </div>
 
           <a
-            href="https://github.com"
+            href="https://github.com/edu-ricardo/verificador-aluguel"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors border border-slate-200"
