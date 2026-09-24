@@ -52,7 +52,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-verificador}:${POSTGRES_PASSWORD:-senha_segura_homelab_123}@postgres:5432/${POSTGRES_DB:-aluguel_temporada}
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-verificador}:${POSTGRES_PASSWORD:-senha_segura_homelab_123}@postgres:5432/${POSTGRES_DB:-aluguel_temporada}
       - REDIS_URL=redis://redis:6379/0
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["*"]}
