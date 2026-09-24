@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -18,12 +19,24 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Iniciando Verificador Aluguel Casas API...")
-    try:
-        await init_db()
-        logger.info("Banco de dados inicializado com sucesso.")
-    except Exception as e:
-        logger.warning(f"Aviso na inicialização do banco: {e}")
+
+    async def init_db_with_retries():
+        for attempt in range(1, 11):
+            try:
+                await init_db()
+                logger.info("Banco de dados inicializado com sucesso.")
+                return
+            except Exception as e:
+                logger.warning(f"Tentativa {attempt}/10: Banco de dados ainda não pronto ({e}). Aguardando 2s...")
+                await asyncio.sleep(2)
+        logger.error(
+            "Não foi possível conectar ao banco de dados após 10 tentativas. Operando em modo de busca direto."
+        )
+
+    db_task = asyncio.create_task(init_db_with_retries())
     yield
+    if not db_task.done():
+        db_task.cancel()
     logger.info("Encerrando aplicação.")
 
 
