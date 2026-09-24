@@ -58,7 +58,7 @@ services:
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["*"]}
       - CACHE_TTL_HOURS=${CACHE_TTL_HOURS:-4}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_PORT:-8025}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
@@ -77,14 +77,14 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8025/api/v1}
     container_name: aluguel_frontend
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "${FRONTEND_PORT:-5025}:80"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
       interval: 15s

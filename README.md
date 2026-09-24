@@ -51,15 +51,15 @@ Na seção **Environment variables** do Portainer, preencha as variáveis basead
 POSTGRES_USER=verificador
 POSTGRES_PASSWORD=defina_uma_senha_forte_aqui
 POSTGRES_DB=aluguel_temporada
-BACKEND_PORT=8000
-FRONTEND_PORT=3000
+BACKEND_PORT=8025
+FRONTEND_PORT=5025
 ENVIRONMENT=production
 ```
 
 ### Passo 3: Deploy da Stack
 - Clique em **Deploy the stack**. O Portainer fará o clone do repositório, compilará as imagens e subirá os 4 serviços (`aluguel_frontend`, `aluguel_backend`, `aluguel_postgres`, `aluguel_redis`).
-- Acesse a interface web em `http://IP_DO_SEU_HOMELAB:3000`.
-- Acesse a documentação Swagger da API em `http://IP_DO_SEU_HOMELAB:8000/docs`.
+- Acesse a interface web em `http://IP_DO_SEU_HOMELAB:5025`.
+- Acesse a documentação Swagger da API em `http://IP_DO_SEU_HOMELAB:8025/docs`.
 
 ---
 
@@ -96,7 +96,7 @@ python -m venv venv
 source venv/bin/activate
 
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --port 8025
 ```
 
 ### Frontend (React):
