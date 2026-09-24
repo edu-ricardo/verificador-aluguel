@@ -5,7 +5,20 @@ import FilterSidebar from './components/FilterSidebar';
 import PropertyCard from './components/PropertyCard';
 import { Home, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  // Se for relativo (ex: /api/v1), usa direto
+  if (!envUrl || envUrl.startsWith('/')) {
+    return envUrl || '/api/v1';
+  }
+  // Se foi compilado com localhost mas o usuário está acessando por IP remoto/hostname, usa proxy relativo do Nginx
+  if (typeof window !== 'undefined' && envUrl.includes('localhost') && window.location.hostname !== 'localhost') {
+    return '/api/v1';
+  }
+  return envUrl;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export default function App() {
   const [filters, setFilters] = useState({
