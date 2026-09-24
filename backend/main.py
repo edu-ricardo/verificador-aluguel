@@ -1,9 +1,12 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -70,11 +73,29 @@ async def health_check():
     }
 
 
-@app.get("/", tags=["Root"])
-async def root():
-    return {
-        "message": f"Bem-vindo ao {settings.PROJECT_NAME}",
-        "docs": "/docs",
-        "health": "/health",
-        "api": settings.API_V1_STR,
-    }
+# Monta o frontend estático compilado diretamente no FastAPI
+STATIC_DIR = Path("/app/static")
+if not STATIC_DIR.exists():
+    STATIC_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
+    assets_dir = STATIC_DIR / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        file_path = STATIC_DIR / full_path
+        if full_path and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(STATIC_DIR / "index.html")
+else:
+    @app.get("/", tags=["Root"])
+    async def root():
+        return {
+            "message": f"Bem-vindo ao {settings.PROJECT_NAME}",
+            "docs": "/docs",
+            "health": "/health",
+            "api": settings.API_V1_STR,
+        }
+

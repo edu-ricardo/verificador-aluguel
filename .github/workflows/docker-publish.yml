@@ -6,6 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_APP: ghcr.io/${{ github.repository }}
   IMAGE_BACKEND: ghcr.io/${{ github.repository }}-backend
   IMAGE_FRONTEND: ghcr.io/${{ github.repository }}-frontend
 
@@ -29,6 +30,14 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Unified App image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_APP }}:latest
 
       - name: Build and push Backend image
         uses: docker/build-push-action@v5
