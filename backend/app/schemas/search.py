@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -79,4 +79,7 @@ class SearchResponse(BaseModel):
     cached: bool = False
     failed_platforms: List[str] = Field(
         default_factory=list, description="Portais que não responderam nesta busca (bloqueio ou timeout)"
+    )
+    platform_errors: Dict[str, str] = Field(
+        default_factory=dict, description="Motivo da falha por portal (ex.: ConnectTimeout, HTTP 403)"
     )

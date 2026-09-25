@@ -1,4 +1,5 @@
 import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date
@@ -60,7 +61,8 @@ class BaseScraper(ABC):
             "Cache-Control": "no-cache",
         }
 
-    async def fetch_html(self, url: str, params: Optional[dict] = None) -> Optional[str]:
+    async def fetch_html(self, url: str, params: Optional[dict] = None) -> str:
+        """Baixa a página; levanta ScraperUnavailableError com o motivo (timeout, DNS, HTTP 403...)."""
         try:
             async with httpx.AsyncClient(
                 headers=self.headers,
@@ -68,13 +70,41 @@ class BaseScraper(ABC):
                 follow_redirects=True,
             ) as client:
                 response = await client.get(url, params=params)
-                if response.status_code == 200:
-                    return response.text
-                logger.warning(f"[{self.platform_code}] HTTP {response.status_code} para {url}")
-                return None
         except Exception as e:
-            logger.error(f"[{self.platform_code}] Falha ao requisitar {url}: {e}")
-            return None
+            # Exceções de timeout do httpx têm str() vazio: o nome da classe é o que diagnostica o problema
+            reason = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+            logger.error(f"[{self.platform_code}] Falha ao requisitar {url}: {reason}")
+            raise ScraperUnavailableError(reason) from e
+
+        if response.status_code != 200:
+            logger.warning(f"[{self.platform_code}] HTTP {response.status_code} para {response.url}")
+            raise ScraperUnavailableError(f"HTTP {response.status_code}")
+        return response.text
+
+    @staticmethod
+    def _extract_price(text: str) -> float:
+        """Converte "R$ 1.200", "R$ 450,00" ou "790" em float (ponto é separador de milhar)."""
+        if not text:
+            return 0.0
+        match = re.search(r"\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?", text)
+        if not match:
+            return 0.0
+        return float(match.group(0).replace(".", "").replace(",", "."))
+
+    @staticmethod
+    def _mentions_pets(text: str) -> bool:
+        # Palavra inteira: "pet" como substring casaria "Petrópolis", "carpete", "competição"...
+        return re.search(r"\b(pets?|animais|aceita animal)\b", text) is not None
+
+    @staticmethod
+    def _classify_property_type(title: str) -> str:
+        """chacara | sitio | casa — o padrão é "casa" para não rotular apartamentos/chalés como chácara."""
+        t = title.lower()
+        if re.search(r"\b(ch[aá]cara|rancho)\b", t):
+            return "chacara"
+        if re.search(r"\b(s[ií]tio|fazenda)\b", t):
+            return "sitio"
+        return "casa"
 
     @abstractmethod
     async def search(

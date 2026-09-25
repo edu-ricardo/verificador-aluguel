@@ -59,7 +59,7 @@ ENVIRONMENT=production
 ### Passo 3: Deploy da Stack
 - Clique em **Deploy the stack**. O Portainer fará o clone do repositório, compilará as imagens e subirá os 4 serviços (`aluguel_frontend`, `aluguel_backend`, `aluguel_postgres`, `aluguel_redis`).
 - Acesse a interface web em `http://IP_DO_SEU_HOMELAB:5025`.
-- Acesse a documentação Swagger da API em `http://IP_DO_SEU_HOMELAB:8025/docs`.
+- Acesse a documentação Swagger da API em `http://IP_DO_SEU_HOMELAB:5025/docs` (o container usa a rede do host e serve frontend e API na mesma porta).
 
 ---
 
