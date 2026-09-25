@@ -77,3 +77,6 @@ class SearchResponse(BaseModel):
     total_pages: int
     results: List[SearchPropertyItem]
     cached: bool = False
+    failed_platforms: List[str] = Field(
+        default_factory=list, description="Portais que não responderam nesta busca (bloqueio ou timeout)"
+    )

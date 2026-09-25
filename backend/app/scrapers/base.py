@@ -11,6 +11,10 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+class ScraperUnavailableError(Exception):
+    """O portal não respondeu (bloqueio, timeout ou erro HTTP) — diferente de "nenhum resultado"."""
+
+
 @dataclass
 class ScrapedProperty:
     platform: str
