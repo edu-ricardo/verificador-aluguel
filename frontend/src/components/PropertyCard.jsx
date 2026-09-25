@@ -25,10 +25,18 @@ export default function PropertyCard({ property, nights, onOpenDetails }) {
     }).format(val);
   };
 
+  const bestOfferUrl = property.platforms && property.platforms.length > 0 ? property.platforms[0].url : '#';
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col md:flex-row group">
       {/* Imagem */}
-      <div className="relative md:w-80 h-56 md:h-auto shrink-0 bg-slate-100 overflow-hidden">
+      <a
+        href={bestOfferUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="relative md:w-80 h-56 md:h-auto shrink-0 bg-slate-100 overflow-hidden block"
+        title="Abrir anúncio do imóvel"
+      >
         <img
           src={images[currentImgIdx]}
           alt={property.title}
@@ -50,7 +58,7 @@ export default function PropertyCard({ property, nights, onOpenDetails }) {
             <span>Economize {formatCurrency(property.max_savings)} na melhor oferta!</span>
           </div>
         )}
-      </div>
+      </a>
 
       {/* Conteúdo Principal */}
       <div className="p-5 flex-1 flex flex-col justify-between">
@@ -67,9 +75,16 @@ export default function PropertyCard({ property, nights, onOpenDetails }) {
             )}
           </div>
 
-          <h3 className="text-base font-bold text-slate-900 line-clamp-2 hover:text-brand-700 transition-colors">
-            {property.title}
-          </h3>
+          <a
+            href={bestOfferUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block"
+          >
+            <h3 className="text-base font-bold text-slate-900 line-clamp-2 hover:text-brand-700 transition-colors">
+              {property.title}
+            </h3>
+          </a>
 
           {/* Características */}
           <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-slate-600">

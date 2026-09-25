@@ -45,6 +45,14 @@ class BaseScraper(ABC):
             "User-Agent": settings.SCRAPER_USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
             "Cache-Control": "no-cache",
         }
 
@@ -52,7 +60,7 @@ class BaseScraper(ABC):
         try:
             async with httpx.AsyncClient(
                 headers=self.headers,
-                timeout=httpx.Timeout(5.0, connect=3.0),
+                timeout=httpx.Timeout(10.0, connect=5.0),
                 follow_redirects=True,
             ) as client:
                 response = await client.get(url, params=params)

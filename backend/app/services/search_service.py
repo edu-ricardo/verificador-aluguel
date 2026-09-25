@@ -62,14 +62,21 @@ class SearchService:
                 cached_data = await r.get(cache_key)
                 if cached_data:
                     data = json.loads(cached_data)
-                    data["cached"] = True
-                    return SearchResponse(**data)
+                    # Se o cache antigo contiver imagens ou dados demonstrativos antigos, ignora
+                    if any("unsplash.com" in img for res in data.get("results", []) for img in res.get("images", [])):
+                        logger.info("Cache antigo com dados demonstrativos detectado. Realizando busca ao vivo.")
+                    else:
+                        data["cached"] = True
+                        return SearchResponse(**data)
             except Exception as e:
                 logger.warning(f"Erro ao ler cache Redis: {e}")
         elif cache_key in self._memory_cache:
             data = self._memory_cache[cache_key]
-            data["cached"] = True
-            return SearchResponse(**data)
+            if any("unsplash.com" in img for res in data.get("results", []) for img in res.get("images", [])):
+                logger.info("Cache em memória com dados demonstrativos detectado. Realizando busca ao vivo.")
+            else:
+                data["cached"] = True
+                return SearchResponse(**data)
 
         # 2. Determinação de noites
         nights = 2
@@ -93,10 +100,10 @@ class SearchService:
         try:
             scraped_groups = await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=True),
-                timeout=7.0,
+                timeout=12.0,
             )
         except asyncio.TimeoutError:
-            logger.warning("Tempo limite de busca externa atingido (7s). Utilizando catálogo integrado.")
+            logger.warning("Tempo limite de busca externa atingido (12s). Utilizando catálogo integrado.")
             scraped_groups = []
 
         all_scraped: list[ScrapedProperty] = []
