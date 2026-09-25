@@ -143,11 +143,20 @@ export default function App() {
             {results?.failed_platforms?.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl flex items-center gap-3 text-xs">
                 <AlertCircle className="h-5 w-5 shrink-0 text-amber-500" />
-                <p>
-                  <span className="font-bold">{results.failed_platforms.join(', ')}</span>{' '}
-                  {results.failed_platforms.length > 1 ? 'não responderam' : 'não respondeu'} a tempo
-                  (bloqueio ou lentidão do portal). A comparação abaixo considera apenas os demais portais.
-                </p>
+                <div>
+                  <p>
+                    <span className="font-bold">{results.failed_platforms.join(', ')}</span>{' '}
+                    {results.failed_platforms.length > 1 ? 'não responderam' : 'não respondeu'} a tempo
+                    (bloqueio ou lentidão do portal). A comparação abaixo considera apenas os demais portais.
+                  </p>
+                  {results.platform_errors && (
+                    <p className="mt-1 font-mono text-[11px] text-amber-700">
+                      {Object.entries(results.platform_errors)
+                        .map(([name, reason]) => `${name}: ${reason}`)
+                        .join(' · ')}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 

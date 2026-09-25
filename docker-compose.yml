@@ -6,17 +6,19 @@ services:
       network: host
     container_name: aluguel_temporada
     restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-5025}:8000"
-      - "${BACKEND_PORT:-8025}:8000"
+    # Rede do host também em execução (como no build): pela bridge do Docker no Umbrel o container
+    # não conseguia sair para a internet e toda requisição aos portais terminava em timeout.
+    # Frontend e API são servidos pela mesma porta (a API fica em /api/v1).
+    network_mode: host
     environment:
+      - PORT=${FRONTEND_PORT:-5025}
       - DATABASE_URL=sqlite+aiosqlite:////app/data/aluguel.db
       - ENVIRONMENT=production
       - CACHE_TTL_HOURS=4
     volumes:
       - aluguel_data:/app/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8000'))"]
       interval: 10s
       timeout: 5s
       retries: 5

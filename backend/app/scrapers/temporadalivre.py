@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from bs4 import BeautifulSoup
 
-from app.scrapers.base import BaseScraper, ScrapedProperty, ScraperUnavailableError, logger
+from app.scrapers.base import BaseScraper, ScrapedProperty, logger
 
 BRAZIL_STATES = {
     "AC": "acre",
@@ -59,26 +59,6 @@ class TemporadaLivreScraper(BaseScraper):
             return slug
         return "sao-paulo"
 
-    def _extract_price(self, text: str) -> float:
-        if not text:
-            return 0.0
-        # Exemplo: "R$ 450", "R$ 1.200,00", "790"
-        match = re.search(r"R\$\s*([\d\.,]+)", text)
-        if match:
-            raw_val = match.group(1).replace(".", "").replace(",", ".")
-            try:
-                return float(raw_val)
-            except ValueError:
-                return 0.0
-        # Se for apenas o número da diária
-        num_match = re.search(r"(\d+[\.,]?\d*)", text)
-        if num_match:
-            try:
-                return float(num_match.group(1).replace(",", "."))
-            except ValueError:
-                return 0.0
-        return 0.0
-
     async def search(
         self,
         city: str,
@@ -103,14 +83,9 @@ class TemporadaLivreScraper(BaseScraper):
             params["data_fim"] = check_out.strftime("%d/%m/%Y")
 
         html = await self.fetch_html(url, params=params)
-
-        # Fallback de busca se a URL direta não retornar página válida
-        if not html:
-            search_url = f"{self.base_url}/aluguel-temporada"
-            html = await self.fetch_html(search_url, params={"search": city})
-
-        if not html:
-            raise ScraperUnavailableError(f"{self.platform_name} não respondeu para {city}")
+        # Para cidades que o portal não conhece (e na busca "?search="), o TemporadaLivre responde 200 com
+        # destaques de OUTRAS cidades: só aceitamos anúncios cujo link está dentro do caminho da cidade.
+        city_path = f"/aluguel-temporada/brasil/{state_slug}/{city_slug}/"
 
         results: List[ScrapedProperty] = []
 
@@ -123,7 +98,7 @@ class TemporadaLivreScraper(BaseScraper):
             for card in cards:
                 try:
                     href = card.get("href", "")
-                    if not href or not re.search(r"/\d{4,}-", href):
+                    if not href or not re.search(r"/\d{4,}-", href) or city_path not in href:
                         continue
 
                     ext_id_match = re.search(r"/(\d{4,})-", href)
@@ -168,25 +143,26 @@ class TemporadaLivreScraper(BaseScraper):
 
                     # Bairro / Localização
                     neighborhood = None
+                    loc_text = ""
                     loc_elem = card.select_one("div.location")
                     if loc_elem:
-                        loc_parts = loc_elem.get_text(strip=True).split("/")
+                        # Ex.: "Chácara em Atibaia / Jardim Estância Brasil"
+                        loc_text = loc_elem.get_text(strip=True)
+                        loc_parts = loc_text.split("/")
                         if len(loc_parts) > 1:
                             neighborhood = loc_parts[1].strip()
 
-                    card_text = card.get_text().lower()
-                    has_pool = "piscina" in card_text or "piscina" in title.lower()
-                    allows_pets = "pet" in card_text or "animais" in card_text
+                    card_text = card.get_text(" ").lower()
+                    has_pool = "piscina" in card_text
+                    allows_pets = self._mentions_pets(card_text)
                     has_bbq = "churrasqueira" in card_text or "churras" in card_text or "gourmet" in card_text
 
                     # Tipo de propriedade
-                    p_type = "chacara"
-                    if "sitio" in title.lower() or "sítio" in title.lower():
-                        p_type = "sitio"
-                    elif "apartamento" in title.lower() or "apto" in title.lower():
-                        p_type = "casa"
-                    elif "casa" in title.lower():
-                        p_type = "casa"
+                    # O título é mais específico; a categoria do portal ("Casa em ...", "Chácara / sítio em ...")
+                    # só decide quando o título não indica o tipo
+                    p_type = self._classify_property_type(title)
+                    if p_type == "casa":
+                        p_type = self._classify_property_type(loc_text.split(" em ")[0])
 
                     amenities = []
                     if has_pool:

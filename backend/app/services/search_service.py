@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 import unicodedata
 from difflib import SequenceMatcher
 from typing import Dict, List, Optional
@@ -21,8 +22,8 @@ from app.scrapers import BaseScraper, OLXScraper, ScrapedProperty, TemporadaLivr
 
 logger = logging.getLogger(__name__)
 
-# Tempo máximo por portal: um portal lento/bloqueado não derruba os resultados dos demais
-SCRAPER_TIMEOUT_SECONDS = 12.0
+# Sem Redis (ex.: container único do homelab), evita pagar o timeout de conexão em toda busca
+REDIS_RETRY_INTERVAL_SECONDS = 300
 # Similaridade mínima de título (normalizado) para considerar dois anúncios o mesmo imóvel
 TITLE_MATCH_THRESHOLD = 0.8
 
@@ -34,10 +35,11 @@ class SearchService:
             OLXScraper(),
         ]
         self._redis_client: Optional[redis.Redis] = None
+        self._redis_retry_at = 0.0
         self._memory_cache: Dict[str, dict] = {}
 
     async def get_redis(self) -> Optional[redis.Redis]:
-        if self._redis_client is None:
+        if self._redis_client is None and time.monotonic() >= self._redis_retry_at:
             try:
                 self._redis_client = redis.from_url(
                     settings.REDIS_URL,
@@ -49,6 +51,7 @@ class SearchService:
             except Exception as e:
                 logger.warning(f"Redis indisponível ({e}). Utilizando cache em memória fallback.")
                 self._redis_client = None
+                self._redis_retry_at = time.monotonic() + REDIS_RETRY_INTERVAL_SECONDS
         return self._redis_client
 
     def _generate_cache_key(self, query: SearchQuery) -> str:
@@ -74,7 +77,8 @@ class SearchService:
                 guests=query.guests,
                 property_type=query.property_type,
             ),
-            timeout=SCRAPER_TIMEOUT_SECONDS,
+            # Tempo máximo por portal: um portal lento/bloqueado não derruba os resultados dos demais
+            timeout=settings.SCRAPER_TIMEOUT_SECONDS,
         )
 
     async def search(self, query: SearchQuery, db: Optional[AsyncSession] = None) -> SearchResponse:
@@ -114,11 +118,16 @@ class SearchService:
 
         all_scraped: list[ScrapedProperty] = []
         failed_platforms: List[str] = []
+        platform_errors: Dict[str, str] = {}
         for scraper, res in zip(active_scrapers, scraped_groups):
             if isinstance(res, BaseException):
-                reason = "tempo limite" if isinstance(res, asyncio.TimeoutError) else res
+                if isinstance(res, asyncio.TimeoutError):
+                    reason = f"sem resposta em {settings.SCRAPER_TIMEOUT_SECONDS}s"
+                else:
+                    reason = str(res) or type(res).__name__
                 logger.warning(f"[{scraper.platform_code}] Busca indisponível: {reason}")
                 failed_platforms.append(scraper.platform_name)
+                platform_errors[scraper.platform_name] = reason
             else:
                 all_scraped.extend(res)
 
@@ -180,6 +189,7 @@ class SearchService:
             results=paginated_items,
             cached=False,
             failed_platforms=failed_platforms,
+            platform_errors=platform_errors,
         )
 
         # 8. Salvamento no cache (buscas incompletas não são cacheadas: a falha de um portal persistiria por horas)
