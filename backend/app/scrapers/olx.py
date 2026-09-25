@@ -1,22 +1,16 @@
 import re
-import unicodedata
 from datetime import date
 from typing import List, Optional
 
 from bs4 import BeautifulSoup
 
-from app.scrapers.base import BaseScraper, ScrapedProperty, logger
+from app.scrapers.base import BaseScraper, ScrapedProperty, ScraperUnavailableError, logger
 
 
 class OLXScraper(BaseScraper):
     platform_name = "OLX Imóveis"
     platform_code = "olx"
     base_url = "https://www.olx.com.br"
-
-    def _slugify(self, text: str) -> str:
-        text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("utf-8")
-        text = re.sub(r"[^\w\s-]", "", text).strip().lower()
-        return re.sub(r"[-\s]+", "-", text)
 
     def _extract_price(self, text: str) -> float:
         if not text:
@@ -50,6 +44,9 @@ class OLXScraper(BaseScraper):
             params = {"q": city}
             html = await self.fetch_html(url, params=params)
 
+        if not html:
+            raise ScraperUnavailableError(f"{self.platform_name} não respondeu para {city}")
+
         results: List[ScrapedProperty] = []
 
         if html:
@@ -66,6 +63,8 @@ class OLXScraper(BaseScraper):
                     href = link_elem.get("href", "")
                     if not href:
                         continue
+                    if not href.startswith("http"):
+                        href = f"{self.base_url}{href}"
 
                     # Prioriza anúncios de aluguel por temporada e ignora vendas
                     ext_match = re.search(r"-(\d+)$", href.split("?")[0])
@@ -82,12 +81,16 @@ class OLXScraper(BaseScraper):
                     price_elem = card.select_one("h3.olx-adcard__price, .olx-adcard__price, span[data-ds-component='DS-Text']")
                     daily_rate = self._extract_price(price_elem.get_text(strip=True)) if price_elem else 0.0
 
-                    # Filtra anúncios que são de venda de imóveis (preço astronômico)
-                    if daily_rate > 25000:
+                    # Sem preço não há o que comparar; preço astronômico indica anúncio de venda
+                    if daily_rate <= 0 or daily_rate > 25000:
                         continue
 
-                    img_elem = card.select_one("img[src]")
-                    img_url = img_elem.get("src", "") if img_elem else ""
+                    img_elem = card.select_one("img")
+                    img_url = ""
+                    if img_elem:
+                        img_url = img_elem.get("src") or img_elem.get("data-src") or ""
+                        if not img_url.startswith("http"):
+                            img_url = ""  # placeholder lazy-load (data:image/...) não é foto do anúncio
 
                     card_text = card.get_text().lower()
                     has_pool = "piscina" in card_text or "piscina" in title.lower()
@@ -127,7 +130,7 @@ class OLXScraper(BaseScraper):
                             city=city.title(),
                             state=state_code.upper(),
                             property_type=p_type,
-                            daily_rate=daily_rate if daily_rate > 0 else 520.0,
+                            daily_rate=daily_rate,
                             cleaning_fee=120.0,
                             service_fee=0.0,
                             max_guests=guests if guests > 1 else 12,
@@ -137,81 +140,12 @@ class OLXScraper(BaseScraper):
                             has_bbq=has_bbq,
                             allows_pets=allows_pets,
                             amenities=amenities,
-                            images=[img_url] if img_url else [
-                                "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80"
-                            ],
-                            rating=4.75,
-                            reviews_count=10,
+                            images=[img_url] if img_url else [],
+                            rating=None,
+                            reviews_count=0,
                         )
                     )
                 except Exception as e:
                     logger.debug(f"Erro ao processar card OLX: {e}")
 
-        # Se poucos resultados encontrados na OLX, complementa com links apontando para a busca real no portal
-        if len(results) < 2:
-            results.extend(self._generate_demonstration_results(city, state, guests, property_type))
-
         return results
-
-    def _generate_demonstration_results(
-        self, city: str, state: Optional[str], guests: int, property_type: Optional[str]
-    ) -> List[ScrapedProperty]:
-        base_city = city.title()
-        base_state = (state or "SP").upper()
-        state_code = (state or "sp").lower()
-        city_slug = self._slugify(city)
-        real_portal_search_url = f"https://www.olx.com.br/imoveis/aluguel-de-temporada/estado-{state_code}?q={city}"
-
-        props = [
-            ScrapedProperty(
-                platform=self.platform_code,
-                external_id=f"olx-{city_slug}-01",
-                title=f"Chácara Recanto Verde com Piscina e Campo em {base_city} (Direto com Proprietário)",
-                url=real_portal_search_url,
-                city=base_city,
-                state=base_state,
-                property_type="chacara",
-                neighborhood="Zona Rural / Represa",
-                daily_rate=520.0,
-                cleaning_fee=120.0,
-                service_fee=0.0,
-                max_guests=max(guests, 15),
-                bedrooms=4,
-                bathrooms=3,
-                has_pool=True,
-                has_bbq=True,
-                allows_pets=True,
-                amenities=["Piscina", "Churrasqueira", "Campo de Futebol", "Wi-Fi", "Estacionamento"],
-                images=[
-                    "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=800&q=80",
-                ],
-                rating=4.8,
-                reviews_count=14,
-            ),
-            ScrapedProperty(
-                platform=self.platform_code,
-                external_id=f"olx-{city_slug}-02",
-                title=f"Chácara Paraíso dos Pássaros - Ampla Área Verde em {base_city}",
-                url=real_portal_search_url,
-                city=base_city,
-                state=base_state,
-                property_type="chacara",
-                neighborhood="Portal dos Mananciais",
-                daily_rate=610.0,
-                cleaning_fee=140.0,
-                service_fee=0.0,
-                max_guests=max(guests, 16),
-                bedrooms=4,
-                bathrooms=3,
-                has_pool=True,
-                has_bbq=True,
-                allows_pets=True,
-                amenities=["Piscina com Cascata", "Churrasqueira", "Fogão a Lenha", "Pomar", "Wi-Fi"],
-                images=[
-                    "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80",
-                ],
-                rating=4.85,
-                reviews_count=9,
-            ),
-        ]
-        return props

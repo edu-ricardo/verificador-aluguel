@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from bs4 import BeautifulSoup
 
-from app.scrapers.base import BaseScraper, ScrapedProperty, logger
+from app.scrapers.base import BaseScraper, ScrapedProperty, ScraperUnavailableError, logger
 
 BRAZIL_STATES = {
     "AC": "acre",
@@ -96,7 +96,8 @@ class TemporadaLivreScraper(BaseScraper):
 
         params = {}
         if guests > 1:
-            params["pessoas-max"] = guests
+            # "pessoas-min" = capacidade mínima; "pessoas-max" limitaria a imóveis MENORES que o grupo
+            params["pessoas-min"] = guests
         if check_in and check_out:
             params["data_inicio"] = check_in.strftime("%d/%m/%Y")
             params["data_fim"] = check_out.strftime("%d/%m/%Y")
@@ -107,6 +108,9 @@ class TemporadaLivreScraper(BaseScraper):
         if not html:
             search_url = f"{self.base_url}/aluguel-temporada"
             html = await self.fetch_html(search_url, params={"search": city})
+
+        if not html:
+            raise ScraperUnavailableError(f"{self.platform_name} não respondeu para {city}")
 
         results: List[ScrapedProperty] = []
 
@@ -139,6 +143,9 @@ class TemporadaLivreScraper(BaseScraper):
                     daily_rate = 0.0
                     if price_elem:
                         daily_rate = self._extract_price(price_elem.get_text(strip=True))
+                    # Sem diária não há o que comparar — não inventamos um valor
+                    if daily_rate <= 0:
+                        continue
 
                     # Foto real do anúncio
                     img_elem = card.select_one("div.image img, img")
@@ -201,7 +208,7 @@ class TemporadaLivreScraper(BaseScraper):
                             state=(state or "SP").upper(),
                             property_type=p_type,
                             neighborhood=neighborhood,
-                            daily_rate=daily_rate if daily_rate > 0 else 550.0,
+                            daily_rate=daily_rate,
                             cleaning_fee=150.0,
                             service_fee=0.0,
                             max_guests=max_g,
@@ -211,82 +218,12 @@ class TemporadaLivreScraper(BaseScraper):
                             has_bbq=has_bbq,
                             allows_pets=allows_pets,
                             amenities=amenities,
-                            images=[img_url] if img_url else [
-                                "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=800&q=80"
-                            ],
-                            rating=4.85,
-                            reviews_count=18,
+                            images=[img_url] if img_url else [],
+                            rating=None,
+                            reviews_count=0,
                         )
                     )
                 except Exception as e:
                     logger.debug(f"Erro ao processar card TemporadaLivre: {e}")
 
-        # Se a busca remota não encontrou resultados, complementa com catálogo seguro cujos links apontam para a busca real no portal
-        if len(results) < 2:
-            results.extend(self._generate_demonstration_results(city, state, guests, property_type))
-
         return results
-
-    def _generate_demonstration_results(
-        self, city: str, state: Optional[str], guests: int, property_type: Optional[str]
-    ) -> List[ScrapedProperty]:
-        """Garante disponibilidade de dados consistentes com links reais para a busca da cidade."""
-        base_city = city.title()
-        base_state = (state or "SP").upper()
-        state_slug = self._get_state_slug(state)
-        city_slug = self._slugify(city)
-        real_portal_search_url = f"{self.base_url}/aluguel-temporada/brasil/{state_slug}/{city_slug}"
-
-        props = [
-            ScrapedProperty(
-                platform=self.platform_code,
-                external_id=f"tl-{city_slug}-01",
-                title=f"Chácara Recanto Verde com Piscina e Campo em {base_city}",
-                url=real_portal_search_url,
-                city=base_city,
-                state=base_state,
-                property_type="chacara",
-                neighborhood="Zona Rural / Represa",
-                daily_rate=580.0,
-                cleaning_fee=150.0,
-                service_fee=0.0,
-                max_guests=max(guests, 15),
-                bedrooms=4,
-                bathrooms=3,
-                has_pool=True,
-                has_bbq=True,
-                allows_pets=True,
-                amenities=["Piscina", "Churrasqueira", "Campo de Futebol", "Wi-Fi", "Estacionamento"],
-                images=[
-                    "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=800&q=80",
-                ],
-                rating=4.9,
-                reviews_count=24,
-            ),
-            ScrapedProperty(
-                platform=self.platform_code,
-                external_id=f"tl-{city_slug}-02",
-                title=f"Sítio Bela Vista - Lazer Completo e Lago em {base_city}",
-                url=real_portal_search_url,
-                city=base_city,
-                state=base_state,
-                property_type="sitio",
-                neighborhood="Colinas Verdes",
-                daily_rate=750.0,
-                cleaning_fee=180.0,
-                service_fee=0.0,
-                max_guests=max(guests, 20),
-                bedrooms=5,
-                bathrooms=4,
-                has_pool=True,
-                has_bbq=True,
-                allows_pets=True,
-                amenities=["Piscina Aquecida", "Churrasqueira", "Salão de Jogos", "Lago para Pesca", "Wi-Fi"],
-                images=[
-                    "https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80",
-                ],
-                rating=4.95,
-                reviews_count=38,
-            ),
-        ]
-        return props

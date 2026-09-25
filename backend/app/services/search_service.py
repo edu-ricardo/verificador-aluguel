@@ -2,6 +2,8 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
+import unicodedata
 from difflib import SequenceMatcher
 from typing import Dict, List, Optional
 
@@ -18,6 +20,11 @@ from app.schemas.search import (
 from app.scrapers import BaseScraper, OLXScraper, ScrapedProperty, TemporadaLivreScraper
 
 logger = logging.getLogger(__name__)
+
+# Tempo máximo por portal: um portal lento/bloqueado não derruba os resultados dos demais
+SCRAPER_TIMEOUT_SECONDS = 12.0
+# Similaridade mínima de título (normalizado) para considerar dois anúncios o mesmo imóvel
+TITLE_MATCH_THRESHOLD = 0.8
 
 
 class SearchService:
@@ -45,12 +52,30 @@ class SearchService:
         return self._redis_client
 
     def _generate_cache_key(self, query: SearchQuery) -> str:
-        key_raw = f"{query.city}_{query.state}_{query.check_in}_{query.check_out}_{query.guests}_{query.property_type}"
-        return f"search_cache:{hashlib.md5(key_raw.encode()).hexdigest()}"
+        # A resposta cacheada já vem filtrada, ordenada e paginada: a chave precisa conter todos os parâmetros
+        key_raw = query.model_dump_json()
+        return f"search_cache:v2:{hashlib.md5(key_raw.encode()).hexdigest()}"
+
+    def _normalize_title(self, title: str) -> str:
+        text = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("utf-8").lower()
+        return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", text)).strip()
 
     def _similarity(self, a: str, b: str) -> float:
         """Calcula similaridade textual entre títulos de anúncios para agrupamento cross-plataforma."""
-        return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+        return SequenceMatcher(None, self._normalize_title(a), self._normalize_title(b)).ratio()
+
+    async def _run_scraper(self, scraper: BaseScraper, query: SearchQuery) -> List[ScrapedProperty]:
+        return await asyncio.wait_for(
+            scraper.search(
+                city=query.city,
+                state=query.state,
+                check_in=query.check_in,
+                check_out=query.check_out,
+                guests=query.guests,
+                property_type=query.property_type,
+            ),
+            timeout=SCRAPER_TIMEOUT_SECONDS,
+        )
 
     async def search(self, query: SearchQuery, db: Optional[AsyncSession] = None) -> SearchResponse:
         cache_key = self._generate_cache_key(query)
@@ -62,65 +87,40 @@ class SearchService:
                 cached_data = await r.get(cache_key)
                 if cached_data:
                     data = json.loads(cached_data)
-                    # Se o cache antigo contiver imagens ou dados demonstrativos antigos, ignora
-                    if any("unsplash.com" in img for res in data.get("results", []) for img in res.get("images", [])):
-                        logger.info("Cache antigo com dados demonstrativos detectado. Realizando busca ao vivo.")
-                    else:
-                        data["cached"] = True
-                        return SearchResponse(**data)
+                    data["cached"] = True
+                    return SearchResponse(**data)
             except Exception as e:
                 logger.warning(f"Erro ao ler cache Redis: {e}")
         elif cache_key in self._memory_cache:
-            data = self._memory_cache[cache_key]
-            if any("unsplash.com" in img for res in data.get("results", []) for img in res.get("images", [])):
-                logger.info("Cache em memória com dados demonstrativos detectado. Realizando busca ao vivo.")
-            else:
-                data["cached"] = True
-                return SearchResponse(**data)
+            data = dict(self._memory_cache[cache_key])
+            data["cached"] = True
+            return SearchResponse(**data)
 
         # 2. Determinação de noites
         nights = 2
         if query.check_in and query.check_out:
             nights = max((query.check_out - query.check_in).days, 1)
 
-        # 3. Execução paralela dos Scrapers
-        tasks = [
-            scraper.search(
-                city=query.city,
-                state=query.state,
-                check_in=query.check_in,
-                check_out=query.check_out,
-                guests=query.guests,
-                property_type=query.property_type,
-            )
+        # 3. Execução paralela dos Scrapers (timeout individual por portal)
+        active_scrapers = [
+            scraper
             for scraper in self.scrapers
             if not query.platforms or scraper.platform_code in query.platforms
         ]
-
-        try:
-            scraped_groups = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=12.0,
-            )
-        except asyncio.TimeoutError:
-            logger.warning("Tempo limite de busca externa atingido (12s). Utilizando catálogo integrado.")
-            scraped_groups = []
+        scraped_groups = await asyncio.gather(
+            *(self._run_scraper(scraper, query) for scraper in active_scrapers),
+            return_exceptions=True,
+        )
 
         all_scraped: list[ScrapedProperty] = []
-        for res in scraped_groups:
-            if isinstance(res, list):
+        failed_platforms: List[str] = []
+        for scraper, res in zip(active_scrapers, scraped_groups):
+            if isinstance(res, BaseException):
+                reason = "tempo limite" if isinstance(res, asyncio.TimeoutError) else res
+                logger.warning(f"[{scraper.platform_code}] Busca indisponível: {reason}")
+                failed_platforms.append(scraper.platform_name)
+            else:
                 all_scraped.extend(res)
-            elif isinstance(res, Exception):
-                logger.error(f"Erro no scraper: {res}")
-
-        if not all_scraped:
-            for scraper in self.scrapers:
-                if hasattr(scraper, "_generate_demonstration_results"):
-                    all_scraped.extend(
-                        scraper._generate_demonstration_results(
-                            query.city, query.state, query.guests, query.property_type
-                        )
-                    )
 
         # 4. Agrupamento de anúncios que pertencem ao mesmo imóvel físico
         grouped_items = self._group_properties(all_scraped, nights)
@@ -179,18 +179,20 @@ class SearchService:
             total_pages=total_pages,
             results=paginated_items,
             cached=False,
+            failed_platforms=failed_platforms,
         )
 
-        # 8. Salvamento no cache
-        cache_payload = response.model_dump(mode="json")
-        ttl_seconds = settings.CACHE_TTL_HOURS * 3600
-        if r:
-            try:
-                await r.setex(cache_key, ttl_seconds, json.dumps(cache_payload))
-            except Exception as e:
-                logger.warning(f"Erro ao salvar cache no Redis: {e}")
-        else:
-            self._memory_cache[cache_key] = cache_payload
+        # 8. Salvamento no cache (buscas incompletas não são cacheadas: a falha de um portal persistiria por horas)
+        if not failed_platforms:
+            cache_payload = response.model_dump(mode="json")
+            ttl_seconds = settings.CACHE_TTL_HOURS * 3600
+            if r:
+                try:
+                    await r.setex(cache_key, ttl_seconds, json.dumps(cache_payload))
+                except Exception as e:
+                    logger.warning(f"Erro ao salvar cache no Redis: {e}")
+            else:
+                self._memory_cache[cache_key] = cache_payload
 
         # 9. Persistência assíncrona no Banco (se fornecido)
         if db:
@@ -206,14 +208,15 @@ class SearchService:
             matched = False
             for cluster in clusters:
                 rep = cluster[0]
-                # Compara cidade e título
-                if rep.city.lower() == item.city.lower():
-                    # Similaridade de título ou mesmo tipo + quartos + piscina
-                    title_sim = self._similarity(rep.title, item.title)
-                    if title_sim > 0.45 and rep.bedrooms == item.bedrooms:
-                        cluster.append(item)
-                        matched = True
-                        break
+                # Dois anúncios do mesmo portal são imóveis distintos: só agrupa entre portais diferentes
+                if any(p.platform == item.platform for p in cluster):
+                    continue
+                if rep.city.lower() != item.city.lower() or rep.bedrooms != item.bedrooms:
+                    continue
+                if self._similarity(rep.title, item.title) >= TITLE_MATCH_THRESHOLD:
+                    cluster.append(item)
+                    matched = True
+                    break
             if not matched:
                 clusters.append([item])
 
@@ -249,7 +252,7 @@ class SearchService:
 
             # Marca o mais barato e calcula economia relativa
             for comp in comparison_list:
-                comp.is_cheapest = comp.platform == cheapest.platform
+                comp.is_cheapest = comp is cheapest
                 comp.savings_vs_highest = round(most_expensive.total_price - comp.total_price, 2)
 
             # Reúne imagens e comodidades únicas
@@ -259,9 +262,7 @@ class SearchService:
                 all_images.extend(p.images)
                 all_amenities.extend(p.amenities)
 
-            unique_images = list(dict.fromkeys(all_images)) or [
-                "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=800&q=80"
-            ]
+            unique_images = list(dict.fromkeys(all_images))
             unique_amenities = list(dict.fromkeys(all_amenities))
 
             result_items.append(
@@ -280,7 +281,7 @@ class SearchService:
                     has_bbq=lead.has_bbq,
                     allows_pets=lead.allows_pets,
                     images=unique_images,
-                    amenities=unique_amenities or ["Piscina", "Churrasqueira", "Wi-Fi", "Estacionamento"],
+                    amenities=unique_amenities,
                     platforms=comparison_list,
                     lowest_daily_rate=cheapest.daily_rate,
                     lowest_total_price=cheapest.total_price,

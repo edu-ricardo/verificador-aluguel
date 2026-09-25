@@ -10,13 +10,13 @@ import {
   TrendingDown,
   Info,
   CheckCircle2,
+  Home,
 } from 'lucide-react';
 
 export default function PropertyCard({ property, nights, onOpenDetails }) {
   const [currentImgIdx, setCurrentImgIdx] = useState(0);
-  const images = property.images && property.images.length > 0 ? property.images : [
-    'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=800&q=80'
-  ];
+  const images = property.images || [];
+  const hasImage = currentImgIdx < images.length;
 
   const formatCurrency = (val) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -37,14 +37,21 @@ export default function PropertyCard({ property, nights, onOpenDetails }) {
         className="relative md:w-80 h-56 md:h-auto shrink-0 bg-slate-100 overflow-hidden block"
         title="Abrir anúncio do imóvel"
       >
-        <img
-          src={images[currentImgIdx]}
-          alt={property.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          onError={(e) => {
-            e.target.src = 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80';
-          }}
-        />
+        {hasImage ? (
+          <img
+            src={images[currentImgIdx]}
+            alt={property.title}
+            // Portais como a OLX bloqueiam (403) imagens requisitadas com Referer de outro domínio
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            onError={() => setCurrentImgIdx((idx) => idx + 1)}
+          />
+        ) : (
+          <div className="w-full h-full min-h-56 flex flex-col items-center justify-center gap-2 text-slate-400">
+            <Home className="h-10 w-10" />
+            <span className="text-xs font-medium">Foto indisponível</span>
+          </div>
+        )}
 
         {/* Badge do Tipo de Imóvel */}
         <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-1 rounded-full capitalize">
